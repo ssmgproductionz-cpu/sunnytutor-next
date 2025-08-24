@@ -1,76 +1,99 @@
+// src/components/ChatCoach.tsx
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
+import TTSButton from '@/components/TTSButton';
 
-type Level = 'k2' | 'g3_5' | 'g6_8';
+type Level = 'k2' | '3-5' | '6-8';
+type CoachResponse = { reply: string; _model?: string; _status?: number; _code?: string };
+
+const LEVEL_OPTIONS: { value: Level; label: string }[] = [
+  { value: 'k2', label: 'K–2' },
+  { value: '3-5', label: '3–5' },
+  { value: '6-8', label: '6–8' },
+];
 
 export default function ChatCoach() {
   const [level, setLevel] = useState<Level>('k2');
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [text, setText] = useState('');
   const [reply, setReply] = useState<string>('');
-  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string>('');
 
   async function ask() {
-    setLoading(true);
-    setError('');
+    setErr('');
     setReply('');
+    const msg = text.trim();
+    if (!msg) {
+      setErr('Type a question first.');
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await fetch('/api/coach', {
+      const r = await fetch('/api/coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input.trim(), level }),
+        body: JSON.stringify({ message: msg, level }),
       });
-      const data = await res.json();
-      const text =
-        typeof data.reply === 'string' ? data.reply : 'Sorry, I had trouble thinking.';
-      setReply(text);
+      const data = (await r.json()) as CoachResponse;
+      setReply(data.reply || 'The coach had trouble thinking. Try again.');
     } catch {
-      setError('Network error. Please try again.');
+      setReply('Network hiccup. Please try again.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="rounded-2xl border bg-white shadow-sm p-4 space-y-3">
-      <div className="flex gap-3 items-center">
-        <label className="text-sm text-gray-600">Reading level:</label>
-        <select
-          className="rounded-xl border px-3 py-1.5 text-sm bg-white"
-          value={level}
-          onChange={(e) => setLevel(e.target.value as Level)}
-        >
-          <option value="k2">K–2</option>
-          <option value="g3_5">3–5</option>
-          <option value="g6_8">6–8</option>
-        </select>
+    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-lg font-semibold">AI Chat Coach</h3>
+        <label className="text-sm text-gray-600">
+          Reading level:{' '}
+          <select
+            value={level}
+            onChange={(e) => setLevel(e.target.value as Level)}
+            className="rounded-xl border px-2 py-1 text-sm"
+          >
+            {LEVEL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <textarea
-        className="w-full rounded-xl border px-3 py-2 text-sm bg-white"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
         rows={3}
-        placeholder='Ask for a gentle hint (e.g., "How do I simplify 2/8?")'
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
+        placeholder="Ask for a gentle hint. Try: “I’m stuck on 1/2 + 1/4.”"
+        className="w-full rounded-xl border p-3 text-sm outline-none focus:ring"
       />
 
-      <div className="flex items-center gap-3">
+      <div className="mt-3 flex gap-2">
         <button
-          className="rounded-2xl px-4 py-2 border shadow-sm bg-white hover:bg-gray-50 text-sm"
           onClick={ask}
-          disabled={!input.trim() || loading}
+          disabled={loading}
+          className="rounded-2xl border bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
         >
           {loading ? 'Thinking…' : 'Get hint'}
         </button>
+        {reply && (
+          <TTSButton text={reply} className="border px-3 py-2 rounded-2xl text-sm" />
+        )}
       </div>
 
-      {error && <div className="text-sm text-red-600">{error}</div>}
-      {reply && (
-        <div className="rounded-xl border bg-gray-50 p-3 text-sm text-gray-900 whitespace-pre-wrap">
-          {reply}
-        </div>
-      )}
+      {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+
+      <div className="mt-3 min-h-[2.5rem] rounded-xl border bg-gray-50 p-3 text-sm">
+        {loading ? (
+          <span className="animate-pulse">…typing</span>
+        ) : reply ? (
+          <span>{reply}</span>
+        ) : (
+          <span className="text-gray-500">Your coach’s answer will appear here.</span>
+        )}
+      </div>
     </div>
   );
 }
