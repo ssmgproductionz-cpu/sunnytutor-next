@@ -1,154 +1,144 @@
 // src/app/api/coach/route.ts
 import { NextResponse } from 'next/server';
 
-export const runtime = 'nodejs'; // ensure Node runtime so env vars are available
+export const runtime = 'nodejs';
 
-// ---- Types ----
-type Level = 'k2' | '3-5' | '6-8';
-type CoachRequest = { message: string; level?: Level };
-type CoachOk = { reply: string; _model?: 'offline' | 'gpt-4o-mini' };
-type CoachErr = { reply: string; _status?: number; _code?: string; _body?: string };
+type Level = 'k2' | 'g3' | string;
 
-// ---- Helpers ----
-function parseFraction(msg: string): { n: number; d: number } | null {
-  const m = msg.trim().match(/^(-?\d+)\s*\/\s*(-?\d+)$/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  const d = Number(m[2]);
-  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null;
-  return { n, d };
+interface CoachRequest {
+  message: string;
+  level?: Level;
+}
+
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface OpenAIChoice {
+  index: number;
+  message: ChatMessage;
+  finish_reason: string;
+}
+
+interface OpenAIChatResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: OpenAIChoice[];
+}
+
+function isCoachRequest(x: unknown): x is CoachRequest {
+  if (typeof x !== 'object' || x === null) return false;
+  const rec = x as Record<string, unknown>;
+  return typeof rec.message === 'string' && (typeof rec.level === 'string' || rec.level === undefined);
 }
 
 function gcd(a: number, b: number): number {
-  let x = Math.abs(a);
-  let y = Math.abs(b);
-  while (y !== 0) {
-    const t = y;
-    y = x % y;
-    x = t;
+  while (b !== 0) {
+    const t = b;
+    b = a % b;
+    a = t;
   }
-  return x === 0 ? 1 : x;
+  return Math.abs(a);
+}
+
+/**
+ * Try a quick offline simplifier for plain "a/b" inputs.
+ * Returns a coach reply string, or null if not applicable.
+ */
+function tryOfflineFractionReply(msg: string): string | null {
+  const m = msg.trim().match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (!m) return null;
+  const num = parseInt(m[1], 10);
+  const den = parseInt(m[2], 10);
+  if (den === 0) return 'You cannot divide by zero.';
+  const g = gcd(num, den);
+  if (g > 1) {
+    const sn = num / g;
+    const sd = den / g;
+    return `Divide top and bottom by ${g}: ${num}/${den} → ${sn}/${sd}.`;
+  }
+  // Already simplest — return null so the AI can add a helpful hint instead.
+  return null;
 }
 
 function systemPrompt(level: Level): string {
-  const common =
-    "You are a gentle math coach for young learners. Keep answers short, step-by-step, kid-safe, and encouraging. Prefer concrete examples (pizza slices).";
-  switch (level) {
-    case 'k2':
-      return `${common} Use very simple words (K–2).`;
-    case '3-5':
-      return `${common} Use simple words (grades 3–5).`;
-    case '6-8':
-      return `${common} Use concise middle-school language.`;
-    default:
-      return common;
-  }
+  const readingHint =
+    level === 'k2'
+      ? 'Keep answers short, friendly, and K–2 reading level.'
+      : 'Keep answers clear and concise for a young learner.';
+  return [
+    'You are a gentle math coach for kids learning fractions.',
+    readingHint,
+    'Prefer one or two short steps; avoid big walls of text.',
+  ].join(' ');
 }
 
-// ---- Route ----
 export async function POST(req: Request) {
-  let body: CoachRequest | null = null;
-
   try {
-    body = (await req.json()) as CoachRequest;
-  } catch {
-    return NextResponse.json<CoachErr>(
-      { reply: 'Invalid JSON.', _status: 400, _code: 'bad_json' },
-      { status: 400 },
-    );
-  }
-
-  const message = (body?.message ?? '').toString().slice(0, 500);
-  const level: Level = (body?.level as Level) || 'k2';
-
-  // Log request (shows up in Vercel runtime logs)
-  console.log('[coach] request', { level, msg: message.slice(0, 80) });
-
-  // 1) OFFLINE: simple fraction simplifier if the message is just "a/b"
-  const frac = parseFraction(message);
-  if (frac) {
-    const g = gcd(frac.n, frac.d);
-    if (g > 1) {
-      const reply = `Divide top and bottom by ${g}: ${frac.n}/${frac.d} → ${frac.n / g}/${frac.d / g}.`;
-      console.log('[coach] reply', { model: 'offline', n: frac.n, d: frac.d, gcd: g });
-      return NextResponse.json<CoachOk>({ reply, _model: 'offline' });
-    }
-    // Already simplest form
-    const reply = `${frac.n}/${frac.d} is already in simplest form.`;
-    console.log('[coach] reply', { model: 'offline', n: frac.n, d: frac.d, gcd: 1 });
-    return NextResponse.json<CoachOk>({ reply, _model: 'offline' });
-  }
-
-  // 2) ONLINE: call OpenAI for general coaching
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || !apiKey.startsWith('sk-')) {
-    console.error('[coach] error', { message: 'Missing or invalid OPENAI_API_KEY' });
-    return NextResponse.json<CoachErr>(
-      {
-        reply: 'The coach is not configured yet. Add OPENAI_API_KEY in Vercel env and redeploy.',
-        _status: 500,
-        _code: 'missing_api_key',
-      },
-      { status: 500 },
-    );
-  }
-
-  const sys = systemPrompt(level);
-
-  try {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0.3,
-        messages: [
-          { role: 'system', content: sys },
-          { role: 'user', content: message },
-        ],
-      }),
-    });
-
-    if (!r.ok) {
-      const text = await r.text();
-      console.error('[coach] error', { status: r.status, body: text.slice(0, 300) });
-      return NextResponse.json<CoachErr>(
-        {
-          reply: r.status === 429
-            ? 'The coach is a bit busy. Try again in a moment.'
-            : 'The coach had trouble thinking. Try again.',
-          _status: r.status,
-          _code: r.status === 429 ? 'rate_limited' : 'upstream_error',
-          _body: text.slice(0, 300),
-        },
-        { status: 200 }, // keep UI simple: we still return 200 with a friendly message
-      );
+    const bodyUnknown = await req.json();
+    if (!isCoachRequest(bodyUnknown)) {
+      return NextResponse.json({ reply: 'Bad request.' }, { status: 400 });
     }
 
-    type Choice = { message?: { content?: string } };
-    type ChatResp = { choices?: Choice[] };
+    const { message, level = 'k2' } = bodyUnknown;
 
-    const data = (await r.json()) as ChatResp;
-    const reply = data.choices?.[0]?.message?.content?.trim();
+    // 1) Offline fast-path for plain fractions like "2/8"
+    const offline = tryOfflineFractionReply(message);
+    if (offline) {
+      return NextResponse.json({ reply: offline, _model: 'offline' as const });
+    }
 
-    if (!reply) {
-      console.error('[coach] error', { message: 'No content in OpenAI response' });
-      return NextResponse.json<CoachErr>(
-        { reply: 'The coach had trouble thinking. Try again.' },
+    // 2) Online path via OpenAI
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { reply: 'The coach is not configured yet. Add OPENAI_API_KEY on the server.' },
         { status: 200 },
       );
     }
 
-    console.log('[coach] reply', { model: 'gpt-4o-mini' });
-    return NextResponse.json<CoachOk>({ reply, _model: 'gpt-4o-mini' });
-  } catch (e) {
-    const msg = (e as unknown as { message?: string })?.message ?? 'unknown';
-    console.error('[coach] error', { message: msg });
-    return NextResponse.json<CoachErr>(
-      { reply: 'The coach had trouble thinking. Try again.' },
+    const payload = {
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      max_tokens: 160,
+      messages: [
+        { role: 'system', content: systemPrompt(level) },
+        { role: 'user', content: message },
+      ] as ChatMessage[],
+    };
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!r.ok) {
+      const txt = await r.text();
+      // mask possible secrets in logs by not echoing headers/body back
+      return NextResponse.json(
+        { reply: 'The coach had trouble thinking. Try again.', _status: r.status, _code: 'openai_error' },
+        { status: 200 },
+      );
+    }
+
+    const data = (await r.json()) as OpenAIChatResponse;
+    const content =
+      data.choices && data.choices[0] && typeof data.choices[0].message.content === 'string'
+        ? data.choices[0].message.content
+        : 'The coach had trouble thinking. Try again.';
+
+    return NextResponse.json({ reply: content, _model: 'gpt-4o-mini' as const });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json(
+      { reply: 'The coach had trouble thinking. Try again.', _error: msg },
       { status: 200 },
     );
   }
