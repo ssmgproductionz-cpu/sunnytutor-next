@@ -1,74 +1,61 @@
 // src/app/parent/page.tsx
+
 import Link from 'next/link';
 import StatusPill from '@/components/StatusPill';
+import ParentStats from '@/components/ParentStats';
 
-export const metadata = {
-  title: 'Parent dashboard — Sunny Tutor',
-  description: 'Overview and controls for parents',
-};
-
-export default function ParentPage() {
+export default function ParentDashboard() {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      {/* Header */}
+    <main className="max-w-4xl mx-auto px-4 py-6">
+      {/* Header with status */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Parent dashboard</h1>
         <StatusPill />
       </div>
 
-      {/* Content */}
+      {/* 3-up grid */}
       <div className="grid md:grid-cols-3 gap-4">
-        {/* Overview card */}
-        <section className="rounded-2xl border p-4 bg-white">
-          <h2 className="font-medium mb-2">Overview</h2>
-          <ul className="text-sm space-y-1">
-            <li>
-              <span className="text-gray-500">Points:</span> 0
-            </li>
-            <li>
-              <span className="text-gray-500">Streak:</span> 0 days
-            </li>
-            <li>
-              <span className="text-gray-500">Activities:</span> 0
-            </li>
-          </ul>
-          <p className="text-xs text-gray-500 mt-3">
-            (Hook this up to your real progress later.)
-          </p>
-        </section>
+        {/* LIVE Overview from localStorage */}
+        <ParentStats />
 
         {/* Quick actions */}
-        <section className="rounded-2xl border p-4 bg-white">
-          <h2 className="font-medium mb-2">Quick actions</h2>
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="font-medium mb-3">Quick actions</h2>
           <div className="flex flex-wrap gap-2">
             <Link
               href="/"
-              className="rounded-2xl px-4 py-2 border shadow-sm bg-white hover:bg-gray-50 text-sm"
+              className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
             >
               Student home
             </Link>
             <Link
               href="/parent/login?next=/parent"
-              className="rounded-2xl px-4 py-2 border shadow-sm bg-white hover:bg-gray-50 text-sm"
+              className="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900"
             >
               Re-login
             </Link>
           </div>
-          <p className="text-xs text-gray-500 mt-3">
+          <p className="mt-2 text-xs text-gray-500">
             Use “Re-login” if the parent PIN expires.
           </p>
-        </section>
+        </div>
 
-        {/* AI Coach note */}
-        <section className="rounded-2xl border p-4 bg-white">
+        {/* AI Coach info */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="font-medium mb-2">AI Coach</h2>
           <p className="text-sm text-gray-700">
-            The coach uses your server key. If the status pill shows <b>Live</b>,
-            you’re good. If it shows <b>Dev</b> or <b>Error</b>, check{' '}
-            <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">/api/status</code>{' '}
-            and your <b>OPENAI_API_KEY</b> on Vercel.
+            The coach uses your server key. If the status pill shows <b>Live</b>, you’re good.
+            If it shows <b>Dev</b> or <b>Error</b>, check{' '}
+            <code className="px-1 py-0.5 rounded bg-gray-100">/api/status</code>
+            {' '}and your{' '}
+            <code className="px-1 py-0.5 rounded bg-gray-100">OPENAI_API_KEY</code> on Vercel.
           </p>
-        </section>
+          <div className="mt-3 text-xs">
+            <Link href="/api/status" target="_blank" className="underline text-blue-600">
+              Open /api/status
+            </Link>
+          </div>
+        </div>
       </div>
     </main>
   );
