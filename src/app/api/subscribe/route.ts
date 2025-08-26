@@ -2,17 +2,17 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-export const runtime = 'nodejs';
+export const runtime = 'nodejs'; // Resend SDK needs Node runtime
 
 type Body = { email?: string };
 
-function isEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+function isEmail(s: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
 export async function POST(req: Request) {
   try {
-    const { email } = (await req.json()) as Body;
+    const { email }: Body = await req.json();
 
     if (!email || !isEmail(email)) {
       return NextResponse.json(
@@ -21,43 +21,39 @@ export async function POST(req: Request) {
       );
     }
 
-    const key = process.env.RESEND_API_KEY;
+    const apiKey = process.env.RESEND_API_KEY;
     const to = process.env.SUBSCRIBE_TO;
 
-    // Dev-friendly: if envs are missing, just log and succeed without sending.
-    if (!key || !to) {
-      console.log('[subscribe] (dry-run) email:', email, { hasKey: !!key, to });
-      return NextResponse.json({ ok: true, delivered: false });
+    // DRY-RUN: no credentials configured → don't crash, just report
+    if (!apiKey || !to) {
+      console.log('[subscribe] DRY_RUN', { email, apiKeySet: !!apiKey, toSet: !!to });
+      return NextResponse.json({ ok: true, delivered: false, dryRun: true });
     }
 
-    const resend = new Resend(key);
+    const resend = new Resend(apiKey);
 
     const result = await resend.emails.send({
-      from: 'Sunny Tutor <onboarding@resend.dev>',
-      to,
-      replyTo: email,
-      subject: `New parent signup: ${email}`,
-      text: `A parent joined the waitlist.\n\nEmail: ${email}\nTime: ${new Date().toISOString()}`,
+      from: 'SunnyTutor <onboarding@resend.dev>', // switch to a verified domain when you have one
+      to,                                         // e.g. "you@example.com"
+      subject: 'New SunnyTutor subscriber',
+      text: `New subscriber: ${email}`,
     });
 
-    if (result.error) {
-      console.error('[subscribe] resend error:', result.error);
-      return NextResponse.json(
-        { ok: false, error: 'send_failed' },
-        { status: 500 }
-      );
-    }
-
     const id = result.data?.id ?? null;
-    console.log('[subscribe] sent', { email, to, id });
+    const delivered = !!result.data && !result.error;
+    const errorMsg = result.error?.message ?? null;
 
-    return NextResponse.json({ ok: true, delivered: true, id });
+    console.log('[subscribe] sent', { email, to, id, delivered, error: errorMsg });
+
+    return NextResponse.json(
+      { ok: true, delivered, id, error: errorMsg, dryRun: false },
+      { status: delivered ? 200 : 502 }
+    );
   } catch (err) {
     console.error('[subscribe] error', err);
     return NextResponse.json(
-      { ok: false, error: 'send_failed' },
-      { status: 500 }
+      { ok: false, error: 'bad_request' },
+      { status: 400 }
     );
   }
 }
-
