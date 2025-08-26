@@ -1,151 +1,122 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { recordQuiz } from '@/lib/progress';
 
-export type QuizQuestion = {
+type Q = {
   id: string;
   prompt: string;
-  options: string[];
-  answer: string;
-  hint?: string;
+  choices: string[];
+  correctIndex: number;
 };
 
-export default function Quiz({
-  questions,
-  onFinish,
-}: {
-  questions: QuizQuestion[];
-  onFinish?: (scoreFraction: number) => void; // 0..1
-}) {
-  // Shuffle options once
-  const shuffled = useMemo(() => {
-    const arr = questions.map(q => ({ ...q, options: [...q.options] }));
-    arr.forEach(q => {
-      for (let i = q.options.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [q.options[i], q.options[j]] = [q.options[j], q.options[i]];
-      }
-    });
-    return arr;
-  }, [questions]);
+const QUESTIONS: Q[] = [
+  {
+    id: 'q1',
+    prompt: 'If a pizza is cut into 4 pieces and you eat 1, what fraction did you eat?',
+    choices: ['4/3', '1/4', '3/4', '1/3'],
+    correctIndex: 1,
+  },
+  {
+    id: 'q2',
+    prompt: 'Which is the same as 2/8?',
+    choices: ['1/4', '1/8', '2/4', '4/8'],
+    correctIndex: 0,
+  },
+  {
+    id: 'q3',
+    prompt: 'What is 1/2 + 1/4?',
+    choices: ['1/4', '2/4', '3/4', '4/4'],
+    correctIndex: 2,
+  },
+];
 
-  const [idx, setIdx] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [checked, setChecked] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
+export default function Quiz() {
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [graded, setGraded] = useState<{correct: number; total: number} | null>(null);
 
-  const q = shuffled[idx];
+  const onChoose = (qid: string, idx: number) => {
+    setAnswers(a => ({ ...a, [qid]: idx }));
+  };
 
-  // Styles — force visible text
-  const baseBtn =
-    'w-full text-left rounded-2xl border bg-white shadow-sm px-4 py-3 text-sm ' +
-    'hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-blue-300 text-black';
-  const selectedBtn = 'border-blue-600 ring-1 ring-blue-300 bg-blue-50';
-  const correctBtn = 'border-green-600 bg-green-50';
-  const wrongBtn = 'border-red-600 bg-red-50';
-
-  function choose(opt: string) {
-    if (checked) return;
-    setSelected(opt);
-  }
-
-  function check() {
-    if (checked || !selected) return;
-    const isCorrect = selected === q.answer;
-    if (isCorrect) setCorrectCount(c => c + 1);
-    setChecked(true);
-  }
-
-  function next() {
-    if (idx + 1 < shuffled.length) {
-      setIdx(idx + 1);
-      setSelected(null);
-      setChecked(false);
-    } else {
-      const scoreFraction = correctCount / shuffled.length;
-      onFinish?.(scoreFraction);
-      // reset for a new round
-      setIdx(0);
-      setSelected(null);
-      setChecked(false);
-      setCorrectCount(0);
+  const onSubmit = () => {
+    let correct = 0;
+    for (const q of QUESTIONS) {
+      if (answers[q.id] === q.correctIndex) correct++;
     }
-  }
+    setGraded({ correct, total: QUESTIONS.length });
+    recordQuiz(correct, QUESTIONS.length);
+  };
+
+  const reset = () => {
+    setAnswers({});
+    setGraded(null);
+  };
 
   return (
-    <div className="space-y-3">
-      <div className="text-center">
-        <div className="text-sm text-gray-600">
-          Question {idx + 1} / {shuffled.length}
-        </div>
+    <div className="rounded-2xl border border-neutral-200/60 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-base font-semibold">📝 Quick Quiz</h2>
+        {graded ? (
+          <span className="text-sm text-neutral-600">
+            Score: <strong>{graded.correct}/{graded.total}</strong>
+          </span>
+        ) : (
+          <span className="text-sm text-neutral-600">Question 1 / {QUESTIONS.length}</span>
+        )}
       </div>
 
-      <div className="rounded-2xl border p-4 bg-white shadow-sm">
-        <div className="text-base font-medium mb-3">{q.prompt}</div>
+      <div className="space-y-4">
+        {QUESTIONS.map((q, i) => (
+          <div key={q.id} className="p-3 rounded-xl border border-neutral-200/60">
+            <div className="mb-2 font-medium">{q.prompt}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {q.choices.map((c, idx) => {
+                const chosen = answers[q.id] === idx;
+                const isCorrect = graded && idx === q.correctIndex;
+                const isWrongChosen = graded && chosen && !isCorrect;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => onChoose(q.id, idx)}
+                    disabled={!!graded}
+                    className={[
+                      'rounded-lg border px-3 py-2 text-left text-sm',
+                      chosen ? 'border-blue-500 ring-2 ring-blue-200' : 'border-neutral-200',
+                      graded && isCorrect ? 'bg-green-50 border-green-400' : '',
+                      graded && isWrongChosen ? 'bg-red-50 border-red-400' : '',
+                    ].join(' ')}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
 
-        <div className="space-y-3">
-          {q.options.map((opt) => {
-            const isSelected = selected === opt;
-            const isCorrectAnswer = opt === q.answer;
-
-            let cls = baseBtn; // text forced to black
-            if (checked) {
-              if (isCorrectAnswer) cls += ' ' + correctBtn;
-              else if (isSelected) cls += ' ' + wrongBtn;
-            } else if (isSelected) {
-              cls += ' ' + selectedBtn;
-            }
-
-            return (
-              <button
-                key={opt}
-                type="button"
-                className={cls}
-                onClick={() => choose(opt)}
-                aria-pressed={isSelected}
-                style={{ color: '#111' }}   // extra insurance
-                data-option={opt}
-              >
-                <span style={{ color: '#111', fontWeight: 500 }}>
-                  {opt || '(missing option)'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-4 flex items-center gap-3">
-          {!checked ? (
+      <div className="mt-4 flex gap-2">
+        {!graded ? (
+          <button
+            onClick={onSubmit}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            Check
+          </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 text-sm text-green-700">
+              ✅ Saved to progress
+            </div>
             <button
-              type="button"
-              className="rounded-2xl px-4 py-2 border shadow-sm bg-white hover:bg-gray-50 text-sm"
-              onClick={check}
-              disabled={!selected}
+              onClick={reset}
+              className="rounded-lg border border-neutral-300 px-4 py-2 hover:bg-neutral-50"
             >
-              Check answer
+              Reset
             </button>
-          ) : (
-            <>
-              <span
-                className={`text-sm font-medium ${
-                  selected === q.answer ? 'text-green-700' : 'text-red-700'
-                }`}
-              >
-                {selected === q.answer ? 'Correct!' : 'Not quite.'}
-              </span>
-              {q.hint && selected !== q.answer && (
-                <span className="text-sm text-gray-600">Hint: {q.hint}</span>
-              )}
-              <button
-                type="button"
-                className="ml-auto rounded-2xl px-4 py-2 border shadow-sm bg-white hover:bg-gray-50 text-sm"
-                onClick={next}
-              >
-                {idx + 1 < shuffled.length ? 'Next' : 'Finish'}
-              </button>
-            </>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

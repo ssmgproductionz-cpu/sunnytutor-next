@@ -1,8 +1,13 @@
 // src/app/parent/page.tsx
-
 import Link from 'next/link';
 import StatusPill from '@/components/StatusPill';
 import ParentStats from '@/components/ParentStats';
+import EmailCapture from '@/components/EmailCapture';
+
+export const metadata = {
+  title: 'Parent dashboard — Sunny Tutor',
+  description: 'Overview and controls for parents',
+};
 
 export default function ParentDashboard() {
   return (
@@ -13,49 +18,63 @@ export default function ParentDashboard() {
         <StatusPill />
       </div>
 
-      {/* 3-up grid */}
-      <div className="grid md:grid-cols-3 gap-4">
-        {/* LIVE Overview from localStorage */}
-        <ParentStats />
+      {/* Grid sections */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Overview */}
+        <section className="rounded-lg border border-neutral-200/60 bg-white shadow-sm p-4">
+          <h2 className="text-lg font-medium mb-3">Overview</h2>
+          <ParentStats />
+          <p className="mt-2 text-xs text-neutral-500">
+            Live from this browser’s history. (Clears if storage is reset.)
+          </p>
+        </section>
 
         {/* Quick actions */}
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="font-medium mb-3">Quick actions</h2>
+        <section className="rounded-lg border border-neutral-200/60 bg-white shadow-sm p-4">
+          <h2 className="text-lg font-medium mb-3">Quick actions</h2>
           <div className="flex flex-wrap gap-2">
             <Link
               href="/"
-              className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+              className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50"
             >
               Student home
             </Link>
             <Link
               href="/parent/login?next=/parent"
-              className="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900"
+              className="inline-flex items-center rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
             >
               Re-login
             </Link>
           </div>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-neutral-500">
             Use “Re-login” if the parent PIN expires.
           </p>
-        </div>
+        </section>
 
         {/* AI Coach info */}
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="font-medium mb-2">AI Coach</h2>
-          <p className="text-sm text-gray-700">
-            The coach uses your server key. If the status pill shows <b>Live</b>, you’re good.
-            If it shows <b>Dev</b> or <b>Error</b>, check{' '}
-            <code className="px-1 py-0.5 rounded bg-gray-100">/api/status</code>
-            {' '}and your{' '}
-            <code className="px-1 py-0.5 rounded bg-gray-100">OPENAI_API_KEY</code> on Vercel.
+        <section className="rounded-lg border border-neutral-200/60 bg-white shadow-sm p-4">
+          <h2 className="text-lg font-medium mb-3">AI Coach</h2>
+          <p className="text-sm text-neutral-700">
+            The coach uses your server key. If the status pill shows{' '}
+            <span className="font-medium">Live</span>, you’re good. If it shows{' '}
+            <span className="font-medium">Dev</span> or{' '}
+            <span className="font-medium">Error</span>, check{' '}
+            <a
+              href="/api/status"
+              className="text-blue-600 hover:underline"
+              target="_blank"
+            >
+              /api/status
+            </a>{' '}
+            and your <code>OPENAI_API_KEY</code> on Vercel.
           </p>
-          <div className="mt-3 text-xs">
-            <Link href="/api/status" target="_blank" className="underline text-blue-600">
-              Open /api/status
-            </Link>
-          </div>
-        </div>
+        </section>
+
+        {/* Email capture */}
+        <section className="rounded-lg border border-neutral-200/60 bg-white shadow-sm p-4">
+          <h2 className="text-lg font-medium mb-3">Parent updates</h2>
+          <EmailCapture />
+        </section>
       </div>
     </main>
   );
