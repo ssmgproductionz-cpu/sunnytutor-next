@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-export const runtime = 'nodejs'; // Resend SDK needs Node runtime
+export const runtime = 'nodejs'; // Resend needs Node, not Edge
 
 type Body = { email?: string };
 
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.RESEND_API_KEY;
     const to = process.env.SUBSCRIBE_TO;
 
-    // DRY-RUN: no credentials configured → don't crash, just report
+    // No credentials? Don’t crash—report dry run.
     if (!apiKey || !to) {
       console.log('[subscribe] DRY_RUN', { email, apiKeySet: !!apiKey, toSet: !!to });
       return NextResponse.json({ ok: true, delivered: false, dryRun: true });
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const resend = new Resend(apiKey);
 
     const result = await resend.emails.send({
-      from: 'SunnyTutor <onboarding@resend.dev>', // switch to a verified domain when you have one
+      from: 'SunnyTutor <onboarding@resend.dev>', // swap to your verified domain later
       to,                                         // e.g. "you@example.com"
       subject: 'New SunnyTutor subscriber',
       text: `New subscriber: ${email}`,
