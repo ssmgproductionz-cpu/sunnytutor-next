@@ -1,127 +1,209 @@
-// src/components/Quiz.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+
+/* ----------------------------- Types & Data ----------------------------- */
 
 export type QuizQuestion = {
   id: string;
   prompt: string;
   choices: string[];
   answerIndex: number;
+  hint?: string;
 };
 
-type QuizProps = {
+type Props = {
+  /** Optional custom question set; falls back to built-ins below. */
   questions?: QuizQuestion[];
+  /** Called after the last question. */
+  onComplete?: (summary: { total: number; correct: number }) => void;
 };
 
-// Fallback questions (used if no props are passed)
-const defaultQuestions: QuizQuestion[] = [
+const DEFAULT_QUESTIONS: QuizQuestion[] = [
   {
     id: 'q1',
     prompt: 'What is 1/2 + 1/4?',
     choices: ['1/4', '3/4', '1/2', '2/4'],
     answerIndex: 1,
+    hint: 'Make the bottoms the same first.',
   },
   {
     id: 'q2',
     prompt: 'Simplify 2/8',
-    choices: ['1/4', '2/4', '1/2', '3/4'],
+    choices: ['1/2', '1/4', '2/4', '3/4'],
+    answerIndex: 1,
+    hint: 'Divide top and bottom by 2.',
+  },
+  {
+    id: 'q3',
+    prompt: 'Which is larger?',
+    choices: ['1/3', '1/4'],
     answerIndex: 0,
+    hint: 'Pieces: thirds are bigger than quarters.',
   },
 ];
 
-function bumpProgress(correctNow: boolean) {
-  if (typeof window === 'undefined') return;
-  const key = 'sunny.progress.v1';
-  try {
-    const prev = JSON.parse(localStorage.getItem(key) || '{}') as {
-      total?: number;
-      correct?: number;
-      updatedAt?: string;
-    };
-    const total = (prev.total ?? 0) + 1;
-    const correct = (prev.correct ?? 0) + (correctNow ? 1 : 0);
-    localStorage.setItem(
-      key,
-      JSON.stringify({ total, correct, updatedAt: new Date().toISOString() })
-    );
-  } catch {
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        total: 1,
-        correct: correctNow ? 1 : 0,
-        updatedAt: new Date().toISOString(),
-      })
-    );
-  }
-}
+/* ------------------------------ Component ------------------------------ */
 
-export default function Quiz({ questions: incoming }: QuizProps) {
-  const questions = useMemo(() => incoming ?? defaultQuestions, [incoming]);
+export default function Quiz({ questions, onComplete }: Props) {
+  const qs = useMemo(() => questions ?? DEFAULT_QUESTIONS, [questions]);
 
-  const [answers, setAnswers] = useState<Record<string, number | null>>({});
-  const [results, setResults] = useState<Record<string, 'correct' | 'incorrect' | null>>({});
+  // Persist very light progress locally — no external deps.
+  const STORAGE_KEY = 'quiz:v1';
+
+  const [index, setIndex] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      return Number.isInteger(saved.index) ? Math.min(saved.index, qs.length - 1) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [selected, setSelected] = useState<number | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [correctCount, setCorrectCount] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      return Number.isInteger(saved.correctCount) ? saved.correctCount : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const q = qs[index];
 
   useEffect(() => {
-    const next: Record<string, null> = {};
-    for (const q of questions) next[q.id] = null;
-    setResults(next);
-  }, [questions]);
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ index, correctCount })
+    );
+  }, [index, correctCount]);
 
-  const onSelect = (qid: string, idx: number) => {
-    setAnswers((s) => ({ ...s, [qid]: idx }));
-  };
+  // Auto-advance after a correct check.
+  useEffect(() => {
+    if (!checked || !isCorrect) return;
+    const t = setTimeout(() => next(), 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checked, isCorrect]);
 
-  const onCheck = (q: QuizQuestion) => {
-    const chosen = answers[q.id];
-    if (chosen == null) return;
-    const ok = chosen === q.answerIndex;
-    setResults((s) => ({ ...s, [q.id]: ok ? 'correct' : 'incorrect' }));
-    bumpProgress(ok);
-  };
+  function resetForNext() {
+    setSelected(null);
+    setChecked(false);
+    setIsCorrect(null);
+  }
+
+  function check() {
+    if (selected == null) return;
+    const ok = selected === q.answerIndex;
+    setChecked(true);
+    setIsCorrect(ok);
+    if (ok) setCorrectCount((c) => c + 1);
+  }
+
+  function next() {
+    const last = index >= qs.length - 1;
+    if (last) {
+      onComplete?.({ total: qs.length, correct: correctCount + (isCorrect ? 1 : 0) });
+      // Reset to replay
+      setIndex(0);
+      setCorrectCount(0);
+      resetForNext();
+      return;
+    }
+    setIndex((i) => i + 1);
+    resetForNext();
+  }
+
+  const canCheck = selected !== null && !checked;
 
   return (
-    <div className="space-y-6">
-      {questions.map((q) => {
-        const selected = answers[q.id] ?? null;
-        const state = results[q.id] ?? null;
+    <div className="space-y-4 border border-neutral-800 rounded-xl p-4 bg-neutral-950/40">
+      <h3 className="text-lg font-semibold">Quick quiz</h3>
 
-        return (
-          <div key={q.id} className="rounded-xl border border-neutral-200/70 p-4">
-            <p className="font-medium">{q.prompt}</p>
-            <div className="mt-3 space-y-2">
-              {q.choices.map((choice, i) => (
-                <label key={i} className="flex items-center gap-2 cursor-pointer">
+      {/* Question */}
+      <div className="space-y-3">
+        <p className="text-neutral-200">{q.prompt}</p>
+
+        {/* Choices */}
+        <ul className="grid gap-2">
+          {q.choices.map((choice, i) => {
+            const selectedState = selected === i;
+            const correctState = checked && i === q.answerIndex;
+            const wrongPicked = checked && selectedState && i !== q.answerIndex;
+
+            return (
+              <li key={i}>
+                <label
+                  className={[
+                    'flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors',
+                    'border-neutral-700 bg-neutral-900 text-neutral-200',
+                    'hover:border-neutral-500',
+                    'focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-indigo-500',
+                    selectedState ? 'border-indigo-400 bg-neutral-800' : '',
+                    correctState ? 'border-emerald-500' : '',
+                    wrongPicked ? 'border-rose-500' : '',
+                  ].join(' ')}
+                >
                   <input
                     type="radio"
                     name={`q-${q.id}`}
-                    className="h-4 w-4"
-                    checked={selected === i}
-                    onChange={() => onSelect(q.id, i)}
+                    className="accent-indigo-500"
+                    checked={selectedState}
+                    onChange={() => setSelected(i)}
+                    disabled={checked}
                   />
                   <span>{choice}</span>
                 </label>
-              ))}
-            </div>
+              </li>
+            );
+          })}
+        </ul>
 
-            <div className="mt-3 flex items-center gap-3">
-              <button
-                className="rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-neutral-50 active:bg-neutral-100"
-                onClick={() => onCheck(q)}
-              >
-                Check
-              </button>
-              {state === 'correct' && (
-                <span className="text-green-600 text-sm">Nice! That’s correct.</span>
-              )}
-              {state === 'incorrect' && (
-                <span className="text-red-600 text-sm">Not quite—try another choice.</span>
-              )}
-            </div>
-          </div>
-        );
-      })}
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={check}
+            disabled={!canCheck}
+            className="rounded-md px-4 py-2 text-sm font-medium bg-indigo-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Check
+          </button>
+
+          {checked && (
+            <button
+              onClick={next}
+              className="rounded-md px-4 py-2 text-sm font-medium border border-neutral-700 bg-neutral-900 text-neutral-100 hover:border-neutral-500"
+            >
+              {index >= qs.length - 1 ? 'Finish' : 'Next'}
+            </button>
+          )}
+        </div>
+
+        {/* Feedback */}
+        <p
+          className={checked ? (isCorrect ? 'text-emerald-400' : 'text-rose-400') : 'sr-only'}
+          aria-live="polite"
+        >
+          {checked
+            ? isCorrect
+              ? 'Nice! That is correct.'
+              : q.hint
+              ? `Not quite — hint: ${q.hint}`
+              : 'Not quite — try again.' // (button still shows Next so they can move on)
+            : ' '}
+        </p>
+
+        {/* Progress footer */}
+        <div className="text-xs text-neutral-400">
+          Question {index + 1} / {qs.length} • Correct so far: {correctCount}
+        </div>
+      </div>
     </div>
   );
 }

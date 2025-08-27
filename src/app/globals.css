@@ -1,153 +1,67 @@
-@import "tailwindcss";
-@reference "tailwindcss";
-/* ---------- Tailwind layers ---------- */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- Design tokens ---------- */
-:root {
-  /* Light mode (default) */
-  --background: #faf9f6;          /* warm off-white */
-  --foreground: #111827;          /* gray-900 */
-  --muted: #f3f4f6;               /* gray-100 */
-  --muted-foreground: #6b7280;    /* gray-500 */
-  --card: #ffffff;
-  --ring: #22c55e;                /* green-500 accent */
-  --accent: #16a34a;              /* green-600 */
-  --accent-contrast: #ffffff;
-
-  /* Font stacks */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-               Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-               "Liberation Mono", "Courier New", monospace;
-
-  color-scheme: light;
+/* ===== Theme tokens (light default, dark via media) ===== */
+:root{
+  --bg: oklch(0.99 0.01 250);         /* very light */
+  --bg2: oklch(0.97 0.02 250);
+  --panel: white;
+  --ink: oklch(0.20 0.01 250);        /* near-black */
+  --muted: oklch(0.52 0.02 250);
+  --ring: oklch(0.72 0.12 260);       /* soft indigo */
+  --border: oklch(0.92 0.01 250);
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b0b0b;
-    --foreground: #e5e7eb;        /* gray-200 */
-    --muted: #111214;
-    --muted-foreground: #9ca3af;  /* gray-400 */
-    --card: #0f1113;
-    --ring: #22c55e;              /* same accent ring in dark */
-    --accent: #22c55e;
-    --accent-contrast: #001306;
-
-    color-scheme: dark;
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg: oklch(0.17 0.03 260);
+    --bg2: oklch(0.13 0.03 260);
+    --panel: oklch(0.23 0.03 260);
+    --ink: oklch(0.94 0.02 250);      /* near-white */
+    --muted: oklch(0.75 0.02 250);
+    --ring: oklch(0.72 0.12 260);
+    --border: oklch(0.34 0.02 250);
   }
 }
 
-/* ---------- Base resets ---------- */
-@layer base {
-  html, body {
-    height: 100%;
-  }
-
-  html {
-    -webkit-text-size-adjust: 100%;
-  }
-
-  body {
-    font-family: var(--font-sans);
-    background: var(--background);
-    color: var(--foreground);
-    @apply antialiased;
-  }
-
-  /* Make headings reliably dark in light mode */
-  h1, h2, h3, h4, h5, h6 {
-    color: var(--foreground);
-    font-weight: 600;
-  }
-
-  /* Link styles */
-  a {
-    color: inherit;
-    text-decoration-color: color-mix(in oklab, var(--foreground) 30%, transparent);
-    text-underline-offset: 3px;
-  }
-  a:hover {
-    text-decoration-color: currentColor;
-  }
-
-  /* Text selection */
-  ::selection {
-    background: color-mix(in oklab, var(--accent) 35%, transparent);
-    color: var(--foreground);
-  }
-
-  /* Focus ring */
-  :focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-  }
-
-  /* Smooth scroll (nice for in-page anchors) */
-  html { scroll-behavior: smooth; }
+/* ===== Page background + base text ===== */
+html, body{
+  @apply min-h-screen;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 600px at 50% -200px, var(--bg) 30%, transparent 70%),
+    linear-gradient(to bottom, var(--bg), var(--bg2) 40%, var(--bg2));
 }
 
-/* ---------- Components (your helpers) ---------- */
-@layer components {
-  /* Card */
-  .card {
-    @apply rounded-2xl border border-neutral-200/60 bg-white shadow-sm;
-    background: var(--card);
-    border-color: color-mix(in oklab, var(--foreground) 12%, transparent);
-  }
+/* ===== Cards, inputs, buttons ===== */
+.card{
+  @apply rounded-2xl shadow-sm;
+  background: var(--panel);
+  color: inherit;
+  border: 1px solid var(--border);
+}
+.card *{ color: inherit; } /* keep text readable inside cards */
 
-  /* Primary button */
-  .btn {
-    @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition;
-    background: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .btn:hover { filter: brightness(0.95); }
-  .btn:disabled { @apply opacity-50 cursor-not-allowed; }
-
-  /* Muted button (secondary) */
-  .btn-muted {
-    @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition;
-    background: var(--muted);
-    color: var(--foreground);
-  }
-
-  /* Status pill container fallback spacing */
-  .status-row {
-    @apply flex items-center gap-2;
-  }
+input[type="text"], input[type="email"], textarea, select{
+  @apply rounded-xl px-3 py-2 w-full;
+  background: var(--panel);
+  color: inherit;
+  border: 1px solid var(--border);
+  outline: none;
+}
+button, .btn{
+  @apply rounded-xl px-3 py-2 font-medium inline-flex items-center gap-2;
+  background: var(--ink);
+  color: var(--panel);
+  border: 1px solid var(--ink);
+}
+button:focus-visible, .btn:focus-visible, input:focus-visible{
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
-/* ---------- Utilities you’ll use in pages ---------- */
-@layer utilities {
-  /* Subtle container rhythm */
-  .container-pg { @apply mx-auto max-w-5xl px-4 sm:px-6 lg:px-8; }
-  .section-gap { @apply space-y-6 sm:space-y-8; }
-
-  /* Clamp text width for long prose */
-  .prose-limit { max-width: 70ch; }
-
-  /* Handy shadow bump */
-  .shadow-soft { @apply shadow-sm; }
-}
-
-/* ---------- Nice-to-haves ---------- */
-/* Reduced motion respect */
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
-}
-
-/* Minimal scrollbar styling (WebKit) */
-*::-webkit-scrollbar {
-  width: 10px; height: 10px;
-}
-*::-webkit-scrollbar-thumb {
-  background: color-mix(in oklab, var(--foreground) 15%, transparent);
-  border-radius: 999px;
-}
-*::-webkit-scrollbar-track {
-  background: color-mix(in oklab, var(--background) 80%, transparent);
-}
+/* Small helpers */
+.container-pg{ @apply mx-auto max-w-5xl px-4 sm:px-6 lg:px-8; }
+.section-gap{ @apply space-y-6 sm:space-y-8; }
+.stat{ @apply grid grid-cols-[24px_1fr] items-center gap-3 p-4 rounded-2xl; border:1px solid var(--border); background:var(--panel); }
+.stat .k{ @apply text-sm text-gray-500; color: var(--muted); }
