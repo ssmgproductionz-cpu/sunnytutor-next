@@ -6,15 +6,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
+    "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "pnpm run lint && pnpm run typecheck",
     "approve-builds": "pnpm approve-builds",
     "smoke:url": "node scripts/smoke.mjs",
-    "smoke:dev": "node scripts/smoke.mjs http://localhost:3000",
+    "smoke:dev": "node --enable-source-maps scripts/smoke.mjs dev",
     "smoke:alias": "node scripts/smoke.mjs https://sunnytutor-next1.vercel.app",
-    "smoke:prod": "node scripts/smoke.mjs $NEXT_PUBLIC_SITE_URL"
+    "smoke:prod": "node --enable-source-maps scripts/smoke.mjs prod",
+    "smoke:custom": "node --enable-source-maps scripts/smoke.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "1.5.0",
