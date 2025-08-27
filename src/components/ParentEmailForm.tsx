@@ -1,54 +1,86 @@
+// src/components/ParentEmailForm.tsx
 'use client';
 
-import { useState } from 'react';
-import { setEmail, loadProgress } from '@/lib/progress';
+import { useEffect, useState } from 'react';
+import { getEmail, setEmail } from '@/lib/progress';
+
+type ApiResponse = { ok: boolean; error?: string };
 
 export default function ParentEmailForm() {
-  const [email, setEmailInput] = useState(loadProgress().email ?? '');
-  const [status, setStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle');
+  const [email, setEmailState] = useState('');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'ok' | 'error'>(
+    'idle'
+  );
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const existing = getEmail();
+    if (existing) setEmailState(existing);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setStatus('error');
-      return;
-    }
     setStatus('saving');
+    setMsg(null);
+
     try {
-      setEmail(trimmed); // persist locally too
-      await fetch('/api/subscribe', {
+      const res = await fetch('/api/subscribe', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ email: trimmed }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       });
-      setStatus('saved');
+
+      const data = (await res.json()) as ApiResponse;
+
+      if (res.ok && data.ok) {
+        setEmail(email);
+        setStatus('ok');
+        setMsg('Thanks! Check your inbox for a confirmation.');
+      } else {
+        setStatus('error');
+        setMsg(
+          data.error === 'invalid_email'
+            ? 'Please enter a valid email.'
+            : 'Could not subscribe. Try again.'
+        );
+      }
     } catch {
       setStatus('error');
+      setMsg('Could not subscribe. Try again.');
     }
   }
 
   return (
-    <form onSubmit={onSubmit} className="rounded-2xl border border-neutral-200/60 bg-white p-4 shadow-sm">
-      <div className="mb-2 text-sm font-semibold">Parent email (optional)</div>
-      <div className="flex gap-2">
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <label className="text-sm font-medium text-neutral-700">
+        Get weekly parent tips
+      </label>
+      <div className="flex items-center gap-2">
         <input
           type="email"
+          required
           value={email}
-          onChange={(e) => setEmailInput(e.target.value)}
+          onChange={(e) => setEmailState(e.target.value)}
           placeholder="you@example.com"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2"
+          className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-neutral-900 outline-none ring-0 focus:border-neutral-400"
         />
         <button
           type="submit"
-          disabled={status==='saving'}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+          disabled={status === 'saving'}
+          className="rounded-xl bg-indigo-600 px-4 py-2 text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60"
         >
-          {status==='saving' ? 'Saving…' : 'Save'}
+          {status === 'saving' ? 'Saving…' : 'Subscribe'}
         </button>
       </div>
-      {status==='saved' && <div className="mt-2 text-sm text-green-700">Saved!</div>}
-      {status==='error' && <div className="mt-2 text-sm text-red-700">Please enter a valid email.</div>}
+      {msg && (
+        <p
+          className={`text-sm ${
+            status === 'error' ? 'text-red-600' : 'text-green-700'
+          }`}
+        >
+          {msg}
+        </p>
+      )}
     </form>
   );
 }

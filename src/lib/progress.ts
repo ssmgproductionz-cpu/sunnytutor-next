@@ -1,90 +1,108 @@
-'use client';
+// src/lib/progress.ts
+// Safe, browser-friendly progress storage + helpers (no 'any').
 
-export type ProgressData = {
+export type Progress = {
+  points: number;
+  correct: number;
+  total: number;
+  streakDays: number;
+  lastActiveAt: string | null;
+  email: string | null;
+  activities: number;
+};
+
+const KEY = 'sunnytutor:progress:v1';
+
+const DEFAULT_PROGRESS: Progress = {
+  points: 0,
+  correct: 0,
+  total: 0,
+  streakDays: 0,
+  lastActiveAt: null,
+  email: null,
+  activities: 0,
+};
+
+function inBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+}
+
+function mergeProgress(a: Progress, b: Partial<Progress>): Progress {
+  return {
+    points: b.points ?? a.points,
+    correct: b.correct ?? a.correct,
+    total: b.total ?? a.total,
+    streakDays: b.streakDays ?? a.streakDays,
+    lastActiveAt: b.lastActiveAt ?? a.lastActiveAt,
+    email: b.email ?? a.email,
+    activities: b.activities ?? a.activities,
+  };
+}
+
+export function loadProgress(): Progress {
+  if (!inBrowser()) return { ...DEFAULT_PROGRESS };
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return { ...DEFAULT_PROGRESS };
+    const parsed = JSON.parse(raw) as Partial<Progress>;
+    return mergeProgress(DEFAULT_PROGRESS, parsed);
+  } catch {
+    return { ...DEFAULT_PROGRESS };
+  }
+}
+
+export function saveProgress(update: Partial<Progress>): Progress {
+  const prev = loadProgress();
+  const next = mergeProgress(prev, {
+    ...update,
+    lastActiveAt: new Date().toISOString(),
+  });
+  if (inBrowser()) {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(next));
+    } catch {
+      /* ignore write errors */
+    }
+  }
+  return next;
+}
+
+export function getEmail(): string | null {
+  return loadProgress().email;
+}
+
+export function setEmail(email: string | null): Progress {
+  return saveProgress({ email });
+}
+
+export function bumpActivity(opts?: {
+  pointsDelta?: number;
+  correctDelta?: number;
+  totalDelta?: number;
+}): Progress {
+  const { pointsDelta = 0, correctDelta = 0, totalDelta = 0 } = opts ?? {};
+  const p = loadProgress();
+  return saveProgress({
+    activities: p.activities + 1,
+    points: p.points + pointsDelta,
+    correct: p.correct + correctDelta,
+    total: p.total + totalDelta,
+  });
+}
+
+export function getStats(): {
   points: number;
   streakDays: number;
   activities: number;
-  quizzesTaken: number;
-  correctAnswers: number;
-  lastQuizAt?: string; // ISO date
-  email?: string;
-};
-
-const KEY = 'sunny.progress.v1';
-
-// A tiny event bus so UI can update when progress changes
-export const progressEvents = new EventTarget();
-
-export function loadProgress(): ProgressData {
-  if (typeof window === 'undefined') {
-    // SSR safety: return a neutral snapshot
-    return {
-      points: 0,
-      streakDays: 0,
-      activities: 0,
-      quizzesTaken: 0,
-      correctAnswers: 0,
-      lastQuizAt: undefined,
-      email: undefined,
-    };
-  }
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) throw new Error('no progress');
-    const parsed = JSON.parse(raw) as ProgressData;
-    return {
-      points: parsed.points ?? 0,
-      streakDays: parsed.streakDays ?? 0,
-      activities: parsed.activities ?? 0,
-      quizzesTaken: parsed.quizzesTaken ?? 0,
-      correctAnswers: parsed.correctAnswers ?? 0,
-      lastQuizAt: parsed.lastQuizAt,
-      email: parsed.email,
-    };
-  } catch {
-    return {
-      points: 0,
-      streakDays: 0,
-      activities: 0,
-      quizzesTaken: 0,
-      correctAnswers: 0,
-      lastQuizAt: undefined,
-      email: undefined,
-    };
-  }
-}
-
-export function saveProgress(p: ProgressData) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(KEY, JSON.stringify(p));
-  progressEvents.dispatchEvent(new Event('update'));
-}
-
-// Simple helper to apply quiz results
-export function recordQuiz(correct: number, total: number) {
-  const now = new Date().toISOString();
-  const current = loadProgress();
-
-  const POINTS_PER_CORRECT = 10;
-  const gained = correct * POINTS_PER_CORRECT;
-
-  const updated: ProgressData = {
-    ...current,
-    points: Math.max(0, current.points + gained),
-    activities: current.activities + 1,
-    quizzesTaken: current.quizzesTaken + 1,
-    correctAnswers: current.correctAnswers + correct,
-    lastQuizAt: now,
-    // very simple streak bump: if you want real day boundaries later, replace this
-    streakDays: Math.max(1, current.streakDays || 0),
-  };
-
-  saveProgress(updated);
-  return updated;
-}
-
-export function setEmail(email: string) {
+  accuracy: number; // 0–100 (rounded)
+} {
   const p = loadProgress();
-  p.email = email.trim();
-  saveProgress(p);
+  const accuracy =
+    p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0;
+  return {
+    points: p.points,
+    streakDays: p.streakDays,
+    activities: p.activities,
+    accuracy,
+  };
 }
